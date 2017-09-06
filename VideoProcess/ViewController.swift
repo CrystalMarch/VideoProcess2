@@ -15,10 +15,10 @@ class ViewController: UIViewController,AVCaptureVideoDataOutputSampleBufferDeleg
     var previewLayer:CALayer!
     lazy var context:CIContext={
         //使用OpenGL，保证了更快的渲染速度和更好的性能
-        let eaglCon=EAGLContext(API: EAGLRenderingAPI.OpenGLES2)
+        let eaglCon=EAGLContext(api: EAGLRenderingAPI.openGLES2)
         //关闭颜色管理功能
         let opt=[kCIContextWorkingColorSpace:NSNull()]
-        return CIContext(EAGLContext:eaglCon,options: opt)
+        return CIContext(eaglContext:eaglCon!,options: opt)
     }()
     var faceLayer: CALayer?
     
@@ -29,18 +29,18 @@ class ViewController: UIViewController,AVCaptureVideoDataOutputSampleBufferDeleg
         //添加视频预览层
         previewLayer = CALayer()
         //把bounds的顶点从中心变为左上角
-        previewLayer.anchorPoint = CGPointZero
+        previewLayer.anchorPoint = CGPoint.zero
         previewLayer.bounds = view.bounds
         previewLayer.contentsGravity = kCAGravityResizeAspect
-        self.view.layer.insertSublayer(previewLayer, atIndex: 0)
+        self.view.layer.insertSublayer(previewLayer, at: 0)
         
         //加载摄像头
         captureSession.sessionPreset = AVCaptureSessionPresetPhoto
         let devices = AVCaptureDevice.devices()
-        for device in devices {
-            if (device.hasMediaType(AVMediaTypeVideo)) {
+        for device in devices! {
+            if ((device as AnyObject).hasMediaType(AVMediaTypeVideo)) {
                 //前置摄像头
-                if (device.position == AVCaptureDevicePosition.Front) {
+                if ((device as AnyObject).position == AVCaptureDevicePosition.front) {
                     if let captureDevice=try? AVCaptureDeviceInput(device: device as! AVCaptureDevice) {
                         if captureSession.canAddInput(captureDevice) {
                             captureSession.addInput(captureDevice)
@@ -56,17 +56,17 @@ class ViewController: UIViewController,AVCaptureVideoDataOutputSampleBufferDeleg
     func setupSessionOutput() {
         //添加输出设备到session中，这里添加的是AVCaptureVideoDataOutput，表示视频里的每一帧，除此之外，还有AVCaptureMovieFileOutput（完整的视频）、AVCaptureAudioDataOutput（音频）、AVCaptureStillImageOutput（静态图）等
         let output = AVCaptureVideoDataOutput()
-        let cameraQueue = dispatch_queue_create("cameraQueue", DISPATCH_QUEUE_SERIAL)
+        let cameraQueue = DispatchQueue(label: "cameraQueue", attributes: [])
         output.setSampleBufferDelegate(self, queue: cameraQueue)
         //videoSettings指定一个字典，但是目前只支持kCVPixelBufferPixelFormatTypeKey，用它指定像素的输出格式，这个参数直接影响到生成图像的成功与否
-        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey: Int(kCVPixelFormatType_32BGRA)]
+        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as AnyHashable: Int(kCVPixelFormatType_32BGRA)]
         if captureSession.canAddOutput(output) {
             captureSession.addOutput(output)
         }
         
         //添加人脸检测，AVFoundation框架内置了检测人脸的功能
         let metadataOutput = AVCaptureMetadataOutput()
-        metadataOutput.setMetadataObjectsDelegate(self, queue: dispatch_get_main_queue())
+        metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
         
         if captureSession.canAddOutput(metadataOutput) {
             captureSession.addOutput(metadataOutput)
@@ -80,43 +80,43 @@ class ViewController: UIViewController,AVCaptureVideoDataOutputSampleBufferDeleg
     }
 
     //适应屏幕旋转
-    override func viewWillTransitionToSize(size: CGSize, withTransitionCoordinator
+    override func viewWillTransition(to size: CGSize, with
         coordinator: UIViewControllerTransitionCoordinator) {
         previewLayer.bounds.size = size
     }
     
-    func captureOutput(captureOutput: AVCaptureOutput!, didOutputSampleBuffer sampleBuffer: CMSampleBuffer!, fromConnection connection: AVCaptureConnection!) {
+    func captureOutput(_ captureOutput: AVCaptureOutput!, didOutputSampleBuffer sampleBuffer: CMSampleBuffer!, from connection: AVCaptureConnection!) {
         //处理过程中用到了很多对象，比较占用内存，因此手动增加了自动释放池
         autoreleasepool {
             let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
-            var outputImage = CIImage(CVPixelBuffer: imageBuffer)
+            var outputImage = CIImage(cvPixelBuffer: imageBuffer)
             
             //图像方向调整
-            let orientation = UIDevice.currentDevice().orientation
+            let orientation = UIDevice.current.orientation
             var t: CGAffineTransform!
-            if orientation == UIDeviceOrientation.Portrait {
-                t = CGAffineTransformMakeRotation(CGFloat(-M_PI / 2.0))
-            } else if orientation == UIDeviceOrientation.PortraitUpsideDown {
-                t = CGAffineTransformMakeRotation(CGFloat(M_PI / 2.0))
-            } else if (orientation == UIDeviceOrientation.LandscapeLeft) {
+            if orientation == UIDeviceOrientation.portrait {
+                t = CGAffineTransform(rotationAngle: CGFloat(-M_PI / 2.0))
+            } else if orientation == UIDeviceOrientation.portraitUpsideDown {
+                t = CGAffineTransform(rotationAngle: CGFloat(M_PI / 2.0))
+            } else if (orientation == UIDeviceOrientation.landscapeLeft) {
                 //前置摄像头(LandscapeLeft),后置摄像头(LandscapeRight)
-                t = CGAffineTransformMakeRotation(CGFloat(M_PI))
+                t = CGAffineTransform(rotationAngle: CGFloat(M_PI))
             }
             else {
-                t = CGAffineTransformMakeRotation(0)
+                t = CGAffineTransform(rotationAngle: 0)
             }
-            outputImage = outputImage.imageByApplyingTransform(t)
+            outputImage = outputImage.applying(t)
             
-            let cgImage = context.createCGImage(outputImage, fromRect: outputImage.extent)
+            let cgImage = context.createCGImage(outputImage, from: outputImage.extent)
             //输出预览内容
-            dispatch_sync(dispatch_get_main_queue(), {
+            DispatchQueue.main.sync(execute: {
                 self.previewLayer.contents = cgImage
             })
         }
     }
     
     //人脸识别(界面标记)
-    func captureOutput(captureOutput: AVCaptureOutput!, didOutputMetadataObjects metadataObjects: [AnyObject]!, fromConnection connection: AVCaptureConnection!) {
+    func captureOutput(_ captureOutput: AVCaptureOutput!, didOutputMetadataObjects metadataObjects: [Any]!, from connection: AVCaptureConnection!) {
         
         if metadataObjects.count > 0 {
             
@@ -126,7 +126,7 @@ class ViewController: UIViewController,AVCaptureVideoDataOutputSampleBufferDeleg
             
             if faceLayer == nil {
                 faceLayer = CALayer()
-                faceLayer?.borderColor = UIColor.redColor().CGColor
+                faceLayer?.borderColor = UIColor.red.cgColor
                 faceLayer?.borderWidth = 1
                 view.layer.addSublayer(faceLayer!)
             }
